@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Indoor Navigator</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Lucide React Icons as SVG components
+        const Navigation = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+                <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+            </svg>
+        );
+
+        const MapPin = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+        );
+
+        const ArrowRight = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+        );
+
+        const Search = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+        );
+
+        const Building = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+                <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
+                <path d="M9 22v-4h6v4"></path>
+                <path d="M8 6h.01"></path>
+                <path d="M16 6h.01"></path>
+                <path d="M12 6h.01"></path>
+                <path d="M12 10h.01"></path>
+                <path d="M12 14h.01"></path>
+                <path d="M16 10h.01"></path>
+                <path d="M16 14h.01"></path>
+                <path d="M8 10h.01"></path>
+                <path d="M8 14h.01"></path>
+            </svg>
+        );
+
+        const Layers = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={className}>
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+        );
+
+        const CampusNavigationApp = () => {
+            const [currentLocation, setCurrentLocation] = useState('');
+            const [destination, setDestination] = useState('');
+            const [route, setRoute] = useState(null);
+            const [suggestions, setSuggestions] = useState([]);
+            const [showCurrentSuggestions, setShowCurrentSuggestions] = useState(false);
+            const [showDestSuggestions, setShowDestSuggestions] = useState(false);
+            const [selectedFloor, setSelectedFloor] = useState('ground');
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [locations, setLocations] = useState({});
+            const [error, setError] = useState(null);
+
+            const API_BASE_URL = 'http://localhost:8000';
+
+            useEffect(() => {
+                fetchLocations();
+            }, []);
+
+            const fetchLocations = async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/locations`);
+                    const data = await response.json();
+                    setLocations(data.locations);
+                } catch (err) {
+                    setError('Failed to connect to backend. Make sure the server is running on port 8000.');
+                    console.error('Error fetching locations:', err);
+                }
+            };
+
+            const handleSearch = (value) => {
+                const filtered = Object.keys(locations).filter(loc =>
+                    loc.toLowerCase().includes(value.toLowerCase())
+                );
+                setSuggestions(filtered.slice(0, 10));
+            };
+
+            const handleNavigate = async () => {
+                if (!currentLocation || !destination) return;
+                
+                setIsGenerating(true);
+                setError(null);
+                
+                try {
+                    const response = await fetch(`${API_BASE_URL}/route`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            start: currentLocation,
+                            destination: destination,
+                            use_ai: true
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to generate route');
+                    }
+
+                    const routeData = await response.json();
+                    setRoute(routeData);
+                } catch (err) {
+                    setError('Failed to generate route. Please try again.');
+                    console.error('Error generating route:', err);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            const getFloorLocations = (floor) => {
+                return Object.entries(locations)
+                    .filter(([, loc]) => loc.floor === floor)
+                    .map(([name]) => name);
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 p-4">
+                    <div className="max-w-6xl mx-auto">
+                        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-lg shadow-2xl p-6 mb-6 border border-blue-400">
+                            <div className="flex items-center gap-3 mb-2">
+                                <Navigation className="text-white" size={36} />
+                                <div>
+                                    <h1 className="text-3xl font-bold text-white">Campus Indoor Navigator</h1>
+                                    <p className="text-blue-100 text-sm">Ground, First & Second Floor Navigation System</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {error && (
+                            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
+                                <p className="font-semibold">⚠️ Error</p>
+                                <p className="text-sm">{error}</p>
+                            </div>
+                        )}
+
+                        <div className="grid md:grid-cols-3 gap-6 mb-6">
+                            <div className="md:col-span-2 bg-white rounded-lg shadow-xl p-6">
+                                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <MapPin size={24} className="text-indigo-600" />
+                                    Plan Your Route
+                                    <span className="ml-auto text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-semibold">
+                                        🤖 AI-Powered
+                                    </span>
+                                </h2>
+                                
+                                <div className="space-y-4">
+                                    <div className="relative">
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                            Current Location
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g., Classroom G1, Admin Office..."
+                                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none transition"
+                                            value={currentLocation}
+                                            onChange={(e) => {
+                                                setCurrentLocation(e.target.value);
+                                                handleSearch(e.target.value);
+                                                setShowCurrentSuggestions(true);
+                                                setShowDestSuggestions(false);
+                                            }}
+                                        />
+                                        {suggestions.length > 0 && currentLocation && showCurrentSuggestions && (
+                                            <div className="absolute z-10 w-full mt-2 border rounded-lg bg-white shadow-lg max-h-60 overflow-y-auto">
+                                                {suggestions.map((loc, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="px-4 py-3 hover:bg-indigo-50 cursor-pointer border-b last:border-b-0 flex justify-between items-center"
+                                                        onClick={() => {
+                                                            setCurrentLocation(loc);
+                                                            setSuggestions([]);
+                                                            setShowCurrentSuggestions(false);
+                                                        }}
+                                                    >
+                                                        <span className="font-medium text-gray-800">{loc}</span>
+                                                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
+                                                            {locations[loc]?.floor?.toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="relative">
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                                            Destination
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g., Seminar Hall, Physics Lab..."
+                                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none transition"
+                                            value={destination}
+                                            onChange={(e) => {
+                                                setDestination(e.target.value);
+                                                handleSearch(e.target.value);
+                                                setShowDestSuggestions(true);
+                                                setShowCurrentSuggestions(false);
+                                            }}
+                                        />
+                                        {suggestions.length > 0 && destination && showDestSuggestions && (
+                                            <div className="absolute z-10 w-full mt-2 border rounded-lg bg-white shadow-lg max-h-60 overflow-y-auto">
+                                                {suggestions.map((loc, idx) => (
+                                                    <div
+                                                        key={idx}
+                                                        className="px-4 py-3 hover:bg-indigo-50 cursor-pointer border-b last:border-b-0 flex justify-between items-center"
+                                                        onClick={() => {
+                                                            setDestination(loc);
+                                                            setSuggestions([]);
+                                                            setShowDestSuggestions(false);
+                                                        }}
+                                                    >
+                                                        <span className="font-medium text-gray-800">{loc}</span>
+                                                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded">
+                                                            {locations[loc]?.floor?.toUpperCase()}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <button
+                                        onClick={handleNavigate}
+                                        disabled={!currentLocation || !destination || isGenerating}
+                                        className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2 shadow-lg"
+                                    >
+                                        {isGenerating ? (
+                                            <>
+                                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                                Generating AI Route...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Search size={20} />
+                                                🤖 Find Route with AI
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-xl p-6">
+                                <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <Layers size={20} className="text-indigo-600" />
+                                    Browse by Floor
+                                </h3>
+                                <div className="space-y-2">
+                                    {['ground', 'first', 'second'].map((floor) => (
+                                        <button
+                                            key={floor}
+                                            onClick={() => setSelectedFloor(floor)}
+                                            className={`w-full px-4 py-3 rounded-lg font-medium transition ${
+                                                selectedFloor === floor
+                                                    ? 'bg-indigo-600 text-white shadow-md'
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            <Building className="inline mr-2" size={18} />
+                                            {floor.charAt(0).toUpperCase() + floor.slice(1)} Floor
+                                            <span className="text-xs ml-2 opacity-75">
+                                                ({getFloorLocations(floor).length} rooms)
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                                
+                                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                    <p className="text-xs text-blue-800 font-medium">
+                                        📍 {selectedFloor.toUpperCase()} FLOOR LOCATIONS:
+                                    </p>
+                                    <div className="mt-2 max-h-48 overflow-y-auto">
+                                        {getFloorLocations(selectedFloor).map((loc, idx) => (
+                                            <div
+                                                key={idx}
+                                                onClick={() => setDestination(loc)}
+                                                className="text-xs text-blue-700 py-1 hover:text-blue-900 cursor-pointer hover:bg-blue-100 px-2 rounded"
+                                            >
+                                                • {loc}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Floor Plan Viewer */}
+                        <div className="bg-white rounded-lg shadow-xl p-6 mb-6">
+                            <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                <Building size={24} className="text-indigo-600" />
+                                Floor Plan Viewer
+                            </h2>
+                            
+                            <div className="flex gap-2 mb-4 flex-wrap">
+                                {['ground', 'first', 'second'].map((floor) => (
+                                    <button
+                                        key={floor}
+                                        onClick={() => setSelectedFloor(floor)}
+                                        className={`px-4 py-2 rounded-lg font-medium transition ${
+                                            selectedFloor === floor
+                                                ? 'bg-indigo-600 text-white shadow-md'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        {floor.charAt(0).toUpperCase() + floor.slice(1)} Floor
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="bg-slate-900 rounded-lg p-6 overflow-auto">
+                                <div style={{ minWidth: 'max-content' }}>
+                                    {selectedFloor === 'ground' && (
+                                        <div>
+                                            <h3 className="text-white font-bold text-center mb-4">GROUND FLOOR</h3>
+                                            <div style={{ position: 'relative', width: '900px', height: '400px' }}>
+                                                {/* Corridors */}
+                                                <div style={{ position: 'absolute', top: '50px', left: '150px', width: '700px', height: '40px', backgroundColor: '#4B5563' }}></div>
+                                                <div style={{ position: 'absolute', top: '310px', left: '150px', width: '700px', height: '40px', backgroundColor: '#4B5563' }}></div>
+                                                <div style={{ position: 'absolute', top: '50px', left: '420px', width: '40px', height: '300px', backgroundColor: '#4B5563' }}></div>
+                                                
+                                                {/* Entrance */}
+                                                <div style={{ position: 'absolute', top: '160px', left: '20px', width: '120px', height: '80px', backgroundColor: '#059669', border: '2px solid #34D399', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>Entrance Lobby</span>
+                                                </div>
+                                                
+                                                {/* North Classrooms */}
+                                                <div style={{ position: 'absolute', top: '10px', left: '160px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G1</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '270px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G2</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '470px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G3</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '580px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G4</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '690px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G5</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '800px', width: '90px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G6</span>
+                                                </div>
+                                                
+                                                {/* Admin Office */}
+                                                <div style={{ position: 'absolute', top: '100px', left: '370px', width: '140px', height: '200px', backgroundColor: '#CA8A04', border: '2px solid #FDE047', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>ADMIN OFFICE</span>
+                                                </div>
+                                                
+                                                {/* South Classrooms */}
+                                                <div style={{ position: 'absolute', top: '330px', left: '160px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G7</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '330px', left: '270px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G8</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '330px', left: '520px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G9</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '330px', left: '630px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>G10</span>
+                                                </div>
+                                                
+                                                {/* Washroom */}
+                                                <div style={{ position: 'absolute', top: '160px', left: '760px', width: '120px', height: '80px', backgroundColor: '#7C3AED', border: '2px solid #C4B5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>Ladies Washroom</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {selectedFloor === 'first' && (
+                                        <div>
+                                            <h3 className="text-white font-bold text-center mb-4">FIRST FLOOR</h3>
+                                            <div style={{ position: 'relative', width: '900px', height: '400px' }}>
+                                                {/* Corridors */}
+                                                <div style={{ position: 'absolute', top: '50px', left: '150px', width: '700px', height: '40px', backgroundColor: '#4B5563' }}></div>
+                                                <div style={{ position: 'absolute', top: '310px', left: '150px', width: '700px', height: '40px', backgroundColor: '#4B5563' }}></div>
+                                                <div style={{ position: 'absolute', top: '50px', left: '420px', width: '40px', height: '300px', backgroundColor: '#4B5563' }}></div>
+                                                
+                                                {/* Entrance */}
+                                                <div style={{ position: 'absolute', top: '160px', left: '20px', width: '120px', height: '80px', backgroundColor: '#059669', border: '2px solid #34D399', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>Research Wing</span>
+                                                </div>
+                                                
+                                                {/* North Classrooms */}
+                                                <div style={{ position: 'absolute', top: '10px', left: '160px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>F1</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '270px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>F2</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '470px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>F3</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '580px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>F4</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '690px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>F5</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '800px', width: '90px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>F6</span>
+                                                </div>
+                                                
+                                                {/* Seminar Hall */}
+                                                <div style={{ position: 'absolute', top: '100px', left: '370px', width: '140px', height: '200px', backgroundColor: '#EA580C', border: '2px solid #FDBA74', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>SEMINAR HALL</span>
+                                                </div>
+                                                
+                                                {/* South Labs */}
+                                                <div style={{ position: 'absolute', top: '330px', left: '160px', width: '100px', height: '60px', backgroundColor: '#DC2626', border: '2px solid #FCA5A5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>Computer Lab 1</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '330px', left: '270px', width: '100px', height: '60px', backgroundColor: '#DC2626', border: '2px solid #FCA5A5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>Physics Lab</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '330px', left: '520px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>F7</span>
+                                                </div>
+                                                
+                                                {/* Facilities */}
+                                                <div style={{ position: 'absolute', top: '140px', left: '760px', width: '120px', height: '50px', backgroundColor: '#7C3AED', border: '2px solid #C4B5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>HOD Restroom</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '200px', left: '760px', width: '120px', height: '50px', backgroundColor: '#7C3AED', border: '2px solid #C4B5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>Washroom</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    
+                                    {selectedFloor === 'second' && (
+                                        <div>
+                                            <h3 className="text-white font-bold text-center mb-4">SECOND FLOOR</h3>
+                                            <div style={{ position: 'relative', width: '900px', height: '400px' }}>
+                                                {/* Corridors */}
+                                                <div style={{ position: 'absolute', top: '50px', left: '150px', width: '700px', height: '40px', backgroundColor: '#4B5563' }}></div>
+                                                <div style={{ position: 'absolute', top: '310px', left: '150px', width: '700px', height: '40px', backgroundColor: '#4B5563' }}></div>
+                                                <div style={{ position: 'absolute', top: '50px', left: '420px', width: '40px', height: '300px', backgroundColor: '#4B5563' }}></div>
+                                                
+                                                {/* Entrance */}
+                                                <div style={{ position: 'absolute', top: '160px', left: '20px', width: '120px', height: '80px', backgroundColor: '#059669', border: '2px solid #34D399', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>Entrance Wing</span>
+                                                </div>
+                                                
+                                                {/* North Section */}
+                                                <div style={{ position: 'absolute', top: '10px', left: '160px', width: '100px', height: '60px', backgroundColor: '#DC2626', border: '2px solid #FCA5A5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>Computer Lab 2</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '270px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>Dorm Room</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '580px', width: '100px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>9696Com</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '10px', left: '690px', width: '200px', height: '60px', backgroundColor: '#3B82F6', border: '2px solid #93C5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>S1</span>
+                                                </div>
+                                                
+                                                {/* Seminar Hall */}
+                                                <div style={{ position: 'absolute', top: '100px', left: '370px', width: '140px', height: '200px', backgroundColor: '#EA580C', border: '2px solid #FDBA74', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>SEMINAR HALL</span>
+                                                </div>
+                                                
+                                                {/* South Labs */}
+                                                <div style={{ position: 'absolute', top: '330px', left: '160px', width: '90px', height: '60px', backgroundColor: '#DC2626', border: '2px solid #FCA5A5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '9px', fontWeight: 'bold', textAlign: 'center' }}>Electrical Lab</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '330px', left: '260px', width: '100px', height: '60px', backgroundColor: '#DC2626', border: '2px solid #FCA5A5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>Biology Lab</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '330px', left: '520px', width: '100px', height: '60px', backgroundColor: '#DC2626', border: '2px solid #FCA5A5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '9px', fontWeight: 'bold', textAlign: 'center' }}>Bio-Coty Lab</span>
+                                                </div>
+                                                <div style={{ position: 'absolute', top: '330px', left: '630px', width: '100px', height: '60px', backgroundColor: '#DC2626', border: '2px solid #FCA5A5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '9px', fontWeight: 'bold', textAlign: 'center' }}>Biochemy Lab</span>
+                                                </div>
+                                                
+                                                {/* Washroom */}
+                                                <div style={{ position: 'absolute', top: '160px', left: '760px', width: '120px', height: '80px', backgroundColor: '#7C3AED', border: '2px solid #C4B5FD', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    <span style={{ color: 'white', fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>Washroom</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <p className="text-sm text-gray-600 mt-3 text-center">
+                                💡 Tip: Switch between floors to see the complete layout of the building
+                            </p>
+                        </div>
+
+                        {route && route.valid && (
+                            <div className="bg-white rounded-lg shadow-xl p-6 mb-6">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                                    <ArrowRight className="text-indigo-600" size={28} />
+                                    AI-Generated Directions
+                                    <span className="ml-auto text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-semibold">
+                                        🤖 Powered by Gemini AI
+                                    </span>
+                                </h2>
+                                <div className="flex gap-2 mb-4 flex-wrap">
+                                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                                        From: {route.startFloor.toUpperCase()} Floor
+                                    </span>
+                                    <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+                                        To: {route.endFloor.toUpperCase()} Floor
+                                    </span>
+                                </div>
+                                <div className="space-y-3">
+                                    {route.steps.map((step, idx) => (
+                                        <div key={idx} className="flex gap-4 items-start">
+                                            <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-full flex items-center justify-center font-bold shadow-md">
+                                                {idx + 1}
+                                            </div>
+                                            <div className="flex-1 pt-2">
+                                                <p className="text-gray-800 leading-relaxed">{step}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<CampusNavigationApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>
